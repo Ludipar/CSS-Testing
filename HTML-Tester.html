@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>HTML Tester with IndexedDB Autosave</title>
+  <style>
+    body {
+      font-family: sans-serif;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      height: 100vh;
+      overflow: hidden;
+    }
+    #editor-container {
+      width: 50%;
+      padding: 10px;
+      box-sizing: border-box;
+      overflow-y: auto;
+      border-right: 1px solid #ccc;
+    }
+    #preview-container {
+      width: 50%;
+      padding: 10px;
+      box-sizing: border-box;
+    }
+    textarea {
+      width: 100%;
+      height: 120px;
+      margin-bottom: 10px;
+      font-family: monospace;
+      font-size: 14px;
+      resize: vertical;
+    }
+    button {
+      margin-right: 10px;
+      padding: 5px 10px;
+      font-size: 14px;
+    }
+    #button-container {
+      margin-bottom: 10px;
+    }
+    #preview {
+      width: 100%;
+      height: calc(100% - 40px);
+      border: 1px solid #ccc;
+    }
+    h3 {
+      margin: 5px 0;
+    }
+  </style>
+</head>
+<body>
+  <div id="editor-container">
+    <div id="button-container">
+      <button id="resetBtn">Reset Code</button>
+      <button id="testBtn">Test Code</button>
+    </div>
+    <h3>HTML</h3>
+    <textarea id="htmlCode" placeholder="Enter HTML code here"></textarea>
+    <h3>CSS</h3>
+    <textarea id="cssCode" placeholder="Enter CSS code here"></textarea>
+    <h3>JavaScript</h3>
+    <textarea id="jsCode" placeholder="Enter JavaScript code here"></textarea>
+  </div>
+  <div id="preview-container">
+    <h3>Preview</h3>
+    <iframe id="preview"></iframe>
+  </div>
+
+  <script>
+    // IndexedDB Initialization
+    let db;
+    const dbName = 'htmlTesterDB';
+    const storeName = 'codeStore';
+
+    function initDB() {
+      const request = indexedDB.open(dbName, 1);
+
+      request.onerror = function(event) {
+        console.error('IndexedDB error:', event);
+      };
+
+      request.onupgradeneeded = function(event) {
+        db = event.target.result;
+        if (!db.objectStoreNames.contains(storeName)) {
+          db.createObjectStore(storeName, { keyPath: 'id' });
+        }
+      };
+
+      request.onsuccess = function(event) {
+        db = event.target.result;
+        loadCode();
+      };
+    }
+
+    // Save a piece of code to IndexedDB
+    function saveCode(type, code) {
+      const transaction = db.transaction([storeName], 'readwrite');
+      const store = transaction.objectStore(storeName);
+      store.put({ id: type, code: code });
+      transaction.oncomplete = function() {
+        console.log(type + ' saved.');
+      };
+      transaction.onerror = function(e) {
+        console.error('Error saving ' + type, e);
+      };
+    }
+
+    // Load saved code from IndexedDB
+    function loadCode() {
+      ['html', 'css', 'js'].forEach(function(type) {
+        const transaction = db.transaction([storeName], 'readonly');
+        const store = transaction.objectStore(storeName);
+        const request = store.get(type);
+        request.onsuccess = function(event) {
+          if (request.result) {
+            document.getElementById(type + 'Code').value = request.result.code;
+          }
+        };
+      });
+      // Update preview after loading
+      updatePreview();
+    }
+
+    // Autosave on input change and update preview live
+    function setupAutosave() {
+      ['html', 'css', 'js'].forEach(function(type) {
+        document.getElementById(type + 'Code').addEventListener('input', function() {
+          saveCode(type, this.value);
+          updatePreview();
+        });
+      });
+    }
+
+    // Reset code function with confirmation
+    function resetCode() {
+      if (confirm('Are you sure you want to reset your code?')) {
+        ['html', 'css', 'js'].forEach(function(type) {
+          document.getElementById(type + 'Code').value = '';
+          saveCode(type, '');
+        });
+        updatePreview();
+      }
+    }
+
+    // Test Code: Update the preview iframe with user code
+    function updatePreview() {
+      const html = document.getElementById('htmlCode').value;
+      const css = document.getElementById('cssCode').value;
+      const js = document.getElementById('jsCode').value;
+
+      const previewFrame = document.getElementById('preview');
+      const previewDocument = previewFrame.contentDocument || previewFrame.contentWindow.document;
+
+      previewDocument.open();
+      previewDocument.write(`
+        <!DOCTYPE html>
+        <html>
+        <head>
+          <style>${css}</style>
+        </head>
+        <body>
+          ${html}
+          <script>${js}<\/script>
+        </body>
+        </html>
+      `);
+      previewDocument.close();
+    }
+
+    // Button event listeners
+    document.getElementById('resetBtn').addEventListener('click', resetCode);
+    document.getElementById('testBtn').addEventListener('click', updatePreview);
+
+    // Initialize everything
+    initDB();
+    setupAutosave();
+  </script>
+</body>
+</html>
